@@ -2,11 +2,11 @@
 
 Desktop media converter and planned compressor/editor by GiuClab, styled after [VisiLens](https://github.com/GiuClab/VisiLens).
 
-**Development snapshot v0.2.1:** local FFmpeg conversion is implemented in source. Compression and editing are not functional yet. No installer or release has been published.
+**Development snapshot v0.2.2:** local FFmpeg conversion is implemented in source. Compression and editing are not functional yet. No installer or release has been published.
 
 ## Windows portable test build
 
-Open [GitHub Actions — Windows portable preview](https://github.com/GiuClab/MediaFlow/actions/workflows/portable.yml), select a successful run, and download the artifact named **MediaFlow-v0.2.1-Windows-x64-portable-TEST** at the bottom of the run page (GitHub sign-in may be required). The artifact ZIP contains another ZIP with the MediaFlow folder; extract both, then run `MediaFlow.exe`. Do not run the executable from inside the archive.
+Open [GitHub Actions — Windows portable preview](https://github.com/GiuClab/MediaFlow/actions/workflows/portable.yml), select a successful run, and download the artifact named **MediaFlow-v0.2.2-Windows-x64-portable-TEST** at the bottom of the run page (GitHub sign-in may be required). The artifact ZIP contains another ZIP with the MediaFlow folder; extract both, then run `MediaFlow.exe`. Do not run the executable from inside the archive.
 
 The preview contains FFmpeg and ffprobe. This is a development artifact, not an official release; it is retained for 14 days. If a run fails, it has no working download and its logs should be checked. See bundled FFmpeg license notices.
 
@@ -20,6 +20,10 @@ The preview contains FFmpeg and ffprobe. This is a development artifact, not an 
 2. Install dependencies: `python -m pip install -r requirements.txt`
 3. Check FFmpeg: `ffmpeg -version` and `ffprobe -version`
 4. Start: `python mediaflow.py`
+
+## Input support
+
+ASF, WMV, AVI, MP4, MKV, MOV, MPEG, WebM, FLV, MTS, TS and other video/audio input containers are accepted through the file picker or drag-and-drop. The extension is not the test of compatibility: FFprobe checks that the file contains decodable media. Some old/proprietary codecs may not work with a particular FFmpeg build. Output formats remain MP4, MKV, MOV, WebM, MP3, FLAC and WAV. Smaller windows scroll to keep controls accessible.
 
 ## Converter
 - Batch video/audio conversion to MP4, MKV, MOV, WebM, MP3, FLAC or WAV.
