@@ -14,12 +14,21 @@ from PySide6.QtGui import QAction
 from PySide6.QtWidgets import (
     QApplication, QComboBox, QDialog, QFileDialog, QFrame, QHBoxLayout,
     QLabel, QListWidget, QMainWindow, QMessageBox, QPushButton,
-    QStackedWidget, QVBoxLayout, QWidget, QProgressBar,
+    QStackedWidget, QVBoxLayout, QWidget, QProgressBar, QScrollArea,
 )
 
-APP_VERSION = "0.2.1"
-EXTENSIONS = {".mp4", ".mkv", ".mov", ".avi", ".webm", ".m4v", ".wmv",
-              ".mp3", ".wav", ".flac", ".aac", ".ogg", ".m4a", ".wma"}
+APP_VERSION = "0.2.2"
+# Common formats are offered as a quick filter; FFprobe validates actual streams.
+# An arbitrary file extension is not enough to determine media compatibility.
+EXTENSIONS = {
+    ".3g2", ".3gp", ".asf", ".avi", ".divx", ".dv", ".f4v", ".flv", ".m2t",
+    ".m2ts", ".m4v", ".mkv", ".mod", ".mov", ".mp4", ".mpe", ".mpeg",
+    ".mpg", ".mts", ".mxf", ".ogv", ".rm", ".rmvb", ".tod", ".ts",
+    ".vob", ".webm", ".wmv", ".y4m", ".264", ".265", ".h264", ".h265",
+    ".hevc", ".mp3", ".wav", ".flac", ".aac", ".ogg", ".m4a", ".wma",
+    ".aif", ".aiff", ".ape", ".ac3", ".amr", ".opus", ".alac", ".caf",
+}
+
 LANGS = {"en": "English", "it": "Italiano", "de": "Deutsch", "fr": "Français"}
 
 # All strings shown by the prototype have equivalents in all four languages.
@@ -183,6 +192,10 @@ QPushButton:disabled { background: #E4E8F2; border: 1px solid #D6DDEC; color: #8
 QPushButton#nav { text-align: left; border: none; padding: 12px; }
 QPushButton#navSelected { text-align: left; padding: 12px; }
 QListWidget, QComboBox { background: white; border: 1px solid #DFE3ED; border-radius: 8px; padding: 6px; }
+QComboBox { min-height: 26px; padding: 5px 28px 5px 10px; }
+QComboBox::drop-down { width: 25px; border-left: 1px solid #DFE3ED; }
+QScrollArea { border: none; background: transparent; }
+QScrollArea > QWidget > QWidget { background: #F5F6FB; }
 QListWidget::item { padding: 9px; }
 QListWidget::item:selected { background: #DBE5FF; color: #2445A1; }
 """
@@ -248,7 +261,7 @@ class MediaFlow(QMainWindow):
         self.go_buttons = []
         self.setWindowTitle(f"MediaFlow v{APP_VERSION} — © 2026 GiuClab")
         self.resize(1150, 760)
-        self.setMinimumSize(860, 600)
+        self.setMinimumSize(760, 500)
         self.setStyleSheet(STYLE)
         self.build()
 
@@ -296,7 +309,12 @@ class MediaFlow(QMainWindow):
             btn.clicked.connect(lambda checked=False, i=index: self.navigate(i))
             side.addWidget(btn)
             self.nav.append(btn)
-            self.stack.addWidget(self.make_page(index))
+            scroller = QScrollArea()
+            scroller.setWidgetResizable(True)
+            scroller.setFrameShape(QFrame.Shape.NoFrame)
+            scroller.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+            scroller.setWidget(self.make_page(index))
+            self.stack.addWidget(scroller)
         side.addStretch()
         settings_btn = QPushButton(t(self.lang,"settings"))
         settings_btn.clicked.connect(self.show_settings)
@@ -312,8 +330,9 @@ class MediaFlow(QMainWindow):
 
     def make_page(self, index: int) -> QWidget:
         page = QWidget()
+        page.setObjectName("root")
         layout = QVBoxLayout(page)
-        layout.setContentsMargins(0,0,0,0)
+        layout.setContentsMargins(0,0,10,6)
         layout.setSpacing(12)
         suffix = ("c","p","e")[index]
         layout.addWidget(label(t(self.lang,"title_"+suffix),"title"))
@@ -409,6 +428,8 @@ class MediaFlow(QMainWindow):
         row.addWidget(label(t(self.lang,key)))
         combo=QComboBox()
         combo.addItems(values)
+        combo.setMinimumHeight(36)
+        combo.setSizePolicy(combo.sizePolicy().horizontalPolicy(), combo.sizePolicy().verticalPolicy())
         if self.stack.count() == 0:
             self.controls[key] = combo
         combo.setMinimumWidth(180)
@@ -423,7 +444,11 @@ class MediaFlow(QMainWindow):
             btn.style().polish(btn)
 
     def add_dialog(self) -> None:
-        files, _ = QFileDialog.getOpenFileNames(self,t(self.lang,"add"),str(Path.home()),"Media files (*.mp4 *.mkv *.mov *.avi *.webm *.m4v *.wmv *.mp3 *.wav *.flac *.aac *.ogg *.m4a *.wma);;All files (*)")
+        file_filter = ("Common video and audio files (" +
+                       " ".join("*" + ext for ext in sorted(EXTENSIONS)) +
+                       ");;All files (*)")
+        files, _ = QFileDialog.getOpenFileNames(
+            self, t(self.lang,"add"), str(Path.home()), file_filter)
         self.import_files(files)
 
     def import_files(self, files: list[str]) -> None:
@@ -431,7 +456,9 @@ class MediaFlow(QMainWindow):
         rejected=0
         for raw in files:
             p=Path(raw)
-            if not p.is_file() or p.suffix.lower() not in EXTENSIONS:
+            # Do not reject ASF or less-common formats based on their suffix:
+            # FFprobe performs the actual stream validation when converting.
+            if not p.is_file():
                 rejected+=1
                 continue
             if str(p).casefold() not in existing:
