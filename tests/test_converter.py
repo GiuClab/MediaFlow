@@ -49,3 +49,24 @@ def test_pre_cancelled_job_creates_no_output(tmp_path):
     with pytest.raises(ConversionCancelled):
         convert(Job(source, tmp_path, "mp4"), cancel=cancelled)
     assert list(tmp_path.iterdir()) == [source]
+
+def test_fast_preset_h264():
+    args = encoding_args("mp4", "H.264", "Balanced", True, "Fast")
+    assert args[args.index("-preset") + 1] == "veryfast"
+
+def test_balanced_preset_h264():
+    args = encoding_args("mp4", "H.264", "Balanced", True, "Balanced")
+    assert args[args.index("-preset") + 1] == "medium"
+
+def test_fast_preset_h265():
+    args = encoding_args("mkv", "H.265 / HEVC", "Balanced", True, "Fast")
+    assert args[args.index("-preset") + 1] == "fast"
+
+def test_speed_selection_does_not_change_quality_crf():
+    fast = encoding_args("mp4", "H.264", "High", True, "Fast")
+    balanced = encoding_args("mp4", "H.264", "High", True, "Balanced")
+    assert fast[fast.index("-crf") + 1] == balanced[balanced.index("-crf") + 1]
+
+def test_invalid_speed():
+    with pytest.raises(ConversionError):
+        encoding_args("mp4", "Auto", "Balanced", True, "Turbo")
