@@ -74,10 +74,10 @@ jobs:
           Stop-Process -Id $process.Id -Force
       - name: Create portable ZIP
         shell: pwsh
-        run: Compress-Archive -Path dist/MediaFlow -DestinationPath MediaFlow-v0.2.1-Windows-x64-portable-TEST.zip
+        run: Compress-Archive -Path dist/MediaFlow -DestinationPath MediaFlow-v0.2.2-Windows-x64-portable-TEST.zip
       - uses: actions/upload-artifact@v6
         with:
-          name: MediaFlow-v0.2.1-Windows-x64-portable-TEST
-          path: MediaFlow-v0.2.1-Windows-x64-portable-TEST.zip
+          name: MediaFlow-v0.2.2-Windows-x64-portable-TEST
+          path: MediaFlow-v0.2.2-Windows-x64-portable-TEST.zip
           if-no-files-found: error
           retention-days: 14
