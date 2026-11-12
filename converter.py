@@ -36,6 +36,7 @@ class Job:
     output_format: str
     codec: str = "Auto"
     quality: str = "Balanced"
+    speed: str = "Fast"
 
 def find_binary(name: str) -> str:
     """Search bundled tools beside the EXE/script, then PATH."""
@@ -72,11 +73,11 @@ def inspect_media(source: Path, ffprobe: str | None = None) -> tuple[bool, float
 def _flags() -> int:
     return getattr(subprocess, "CREATE_NO_WINDOW", 0) if os.name == "nt" else 0
 
-def encoding_args(fmt: str, codec: str, quality: str, has_video: bool) -> list[str]:
+def encoding_args(fmt: str, codec: str, quality: str, has_video: bool, speed: str = "Fast") -> list[str]:
     fmt = fmt.lower()
     if fmt not in FORMATS:
         raise ConversionError(f"Unsupported output format: {fmt}")
-    if codec not in CODECS or quality not in QUALITIES:
+    if codec not in CODECS or quality not in QUALITIES or speed not in {"Fast", "Balanced", "Smaller file"}:
         raise ConversionError("Unsupported codec or quality")
     if fmt in VIDEO_FORMATS and not has_video:
         raise ConversionError("An audio-only file cannot be converted to a video format")
@@ -110,13 +111,13 @@ def encoding_args(fmt: str, codec: str, quality: str, has_video: bool) -> list[s
     if selected in ("VP9", "AV1"):
         args += ["-b:v", "0"]
     if selected == "H.264":
-        args += ["-preset", "medium", "-pix_fmt", "yuv420p"]
+        args += ["-preset", {"Fast": "veryfast", "Balanced": "medium", "Smaller file": "slow"}[speed], "-pix_fmt", "yuv420p"]
     elif selected == "H.265 / HEVC":
-        args += ["-preset", "medium", "-pix_fmt", "yuv420p"]
+        args += ["-preset", {"Fast": "fast", "Balanced": "medium", "Smaller file": "slow"}[speed], "-pix_fmt", "yuv420p"]
     elif selected == "AV1":
-        args += ["-cpu-used", "5"]
+        args += ["-cpu-used", {"Fast": "8", "Balanced": "5", "Smaller file": "3"}[speed]]
     else:
-        args += ["-deadline", "good", "-cpu-used", "3"]
+        args += ["-deadline", "good", "-cpu-used", {"Fast": "5", "Balanced": "3", "Smaller file": "1"}[speed]]
     if fmt == "webm":
         args += ["-c:a", "libopus", "-b:a", "128k"]
     else:
@@ -148,7 +149,7 @@ def convert(job: Job, progress: Callable[[float], None] | None = None,
     binary = ffmpeg or find_binary("ffmpeg")
     has_video, duration = inspect_media(source, ffprobe)
     fmt = job.output_format.lower()
-    options = encoding_args(fmt, job.codec, job.quality, has_video)
+    options = encoding_args(fmt, job.codec, job.quality, has_video, job.speed)
     # Never overwrite an existing file, including a file with the input's name.
     stem = source.stem
     if source.parent == directory and source.suffix.lower() == "." + fmt:
