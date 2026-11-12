@@ -1,22 +1,23 @@
 """MediaFlow UI prototype — © 2026 GiuClab.
 
-The prototype does not encode, compress, or edit media. It only imports
-local file references and exposes proposed interface controls.
+The application converts media with FFmpeg; editing and compression remain planned.
 """
 from __future__ import annotations
 
 import sys
+import threading
 from pathlib import Path
+from converter import Job, convert, find_binary, ConversionError, ConversionCancelled
 
-from PySide6.QtCore import Qt, QSettings, Signal
+from PySide6.QtCore import Qt, QSettings, Signal, QThread
 from PySide6.QtGui import QAction
 from PySide6.QtWidgets import (
     QApplication, QComboBox, QDialog, QFileDialog, QFrame, QHBoxLayout,
     QLabel, QListWidget, QMainWindow, QMessageBox, QPushButton,
-    QStackedWidget, QVBoxLayout, QWidget,
+    QStackedWidget, QVBoxLayout, QWidget, QProgressBar,
 )
 
-APP_VERSION = "0.1.0"
+APP_VERSION = "0.2.0"
 EXTENSIONS = {".mp4", ".mkv", ".mov", ".avi", ".webm", ".m4v", ".wmv",
               ".mp3", ".wav", ".flac", ".aac", ".ogg", ".m4a", ".wma"}
 LANGS = {"en": "English", "it": "Italiano", "de": "Deutsch", "fr": "Français"}
@@ -113,6 +114,49 @@ TEXT = {
  },
 }
 
+EXTRA = {
+"en": ("Cancel conversion", "Ready", "Converting", "Completed", "Cancelled", "Errors", "Conversion is running. Cancel it before closing.", "FFmpeg and ffprobe must be installed and available on PATH."),
+"it": ("Annulla conversione", "Pronto", "Conversione", "Completato", "Annullato", "Errori", "Conversione in corso. Annullala prima di chiudere.", "Installa FFmpeg e ffprobe e aggiungi la cartella bin al PATH."),
+"de": ("Konvertierung abbrechen", "Bereit", "Konvertierung", "Abgeschlossen", "Abgebrochen", "Fehler", "Konvertierung läuft. Vor dem Schließen abbrechen.", "FFmpeg und ffprobe installieren und bin zum PATH hinzufügen."),
+"fr": ("Annuler la conversion", "Prêt", "Conversion", "Terminé", "Annulé", "Erreurs", "Conversion en cours. Annulez avant de fermer.", "Installez FFmpeg et ffprobe et ajoutez bin au PATH."),
+}
+EXTRA_KEYS = ("cancel_job", "ready_job", "working_job", "done_job", "cancelled_job", "errors_job", "running_job", "missing_ffmpeg")
+for code, phrases in EXTRA.items():
+    TEXT[code].update(dict(zip(EXTRA_KEYS, phrases)))
+
+
+class ConversionThread(QThread):
+    started_file = Signal(int, str)
+    progressed = Signal(int, float)
+    completed_file = Signal(str)
+    failed_file = Signal(str)
+    completed_batch = Signal(int, int, bool)
+
+    def __init__(self, jobs, parent=None):
+        super().__init__(parent)
+        self.jobs = jobs
+        self.cancel_event = threading.Event()
+
+    def run(self):
+        success = errors = 0
+        for index, job in enumerate(self.jobs):
+            if self.cancel_event.is_set():
+                break
+            self.started_file.emit(index, job.source.name)
+            try:
+                path = convert(job, lambda pct, i=index: self.progressed.emit(i, pct), self.cancel_event)
+                success += 1
+                self.completed_file.emit(str(path))
+            except ConversionCancelled:
+                break
+            except (ConversionError, OSError, ValueError) as exc:
+                errors += 1
+                self.failed_file.emit(str(exc))
+        self.completed_batch.emit(success, errors, self.cancel_event.is_set())
+
+    def cancel(self):
+        self.cancel_event.set()
+
 STYLE = """
 QMainWindow, QWidget#root { background: #F5F6FB; }
 QWidget { font-family: 'Segoe UI', Arial; color: #242936; font-size: 12px; }
@@ -189,7 +233,10 @@ class MediaFlow(QMainWindow):
         self.settings = settings
         self.lang = language
         self.paths: list[Path] = []
-        self.output_dir = str(Path.home() / "Videos")
+        self.output_dir = str((Path.home() / "Videos") if (Path.home() / "Videos").is_dir() else Path.home())
+        self.worker = None
+        self.controls = {}
+        self.go_buttons = []
         self.setWindowTitle(f"MediaFlow v{APP_VERSION} — © 2026 GiuClab")
         self.resize(1150, 760)
         self.setMinimumSize(860, 600)
@@ -198,6 +245,9 @@ class MediaFlow(QMainWindow):
 
     def build(self) -> None:
         self.menuBar().clear()
+        self.controls = {}
+        self.go_buttons = []
+        self.file_views = []
         file_menu = self.menuBar().addMenu(t(self.lang,"menu_file"))
         file_menu.addAction(t(self.lang,"add"), self.add_dialog)
         file_menu.addSeparator()
@@ -247,7 +297,7 @@ class MediaFlow(QMainWindow):
         side.addWidget(about_btn)
         body.addWidget(sidebar)
         body.addWidget(self.stack, 1)
-        outside.addWidget(label(t(self.lang,"status") + f"     |     MediaFlow v{APP_VERSION} — © 2026 GiuClab", "muted"))
+        outside.addWidget(label(f"MediaFlow v{APP_VERSION} — © 2026 GiuClab | Made with ❤️ by GiuClab", "muted"))
         self.navigate(0)
         self.update_file_views()
 
@@ -295,8 +345,8 @@ class MediaFlow(QMainWindow):
         settings_card, sl = card()
         sl.addWidget(label(t(self.lang,"tools") if index==2 else t(self.lang,"output"),"section"))
         if index == 0:
-            self.make_combo(sl,"format",["MP4", "MKV", "MOV", "WebM", "MP3", "FLAC"])
-            self.make_combo(sl,"codec",["H.264", "H.265 / HEVC", "AV1", "VP9"])
+            self.make_combo(sl,"format",["MP4", "MKV", "MOV", "WebM", "MP3", "FLAC", "WAV"])
+            self.make_combo(sl,"codec",["Auto", "H.264", "H.265 / HEVC", "AV1", "VP9"])
             self.make_combo(sl,"quality",["High", "Balanced", "Small file"])
         elif index == 1:
             self.make_combo(sl,"preset",["Best quality", "Balanced", "Smallest file"])
@@ -320,10 +370,26 @@ class MediaFlow(QMainWindow):
         browse.clicked.connect(lambda: self.pick_output(folder))
         footer.addWidget(browse)
         go = QPushButton(t(self.lang,("convert","compress","export")[index]))
-        go.setEnabled(False)
-        go.setToolTip(t(self.lang,"not_ready"))
+        if index == 0:
+            go.setObjectName("primary")
+            go.setEnabled(bool(self.paths))
+            go.clicked.connect(self.start_conversion)
+        else:
+            go.setEnabled(False)
+            go.setToolTip(t(self.lang,"not_ready"))
+        self.go_buttons.append(go)
         footer.addWidget(go)
         layout.addLayout(footer)
+        if index == 0:
+            self.job_status = label(t(self.lang,"ready_job"), "muted")
+            layout.addWidget(self.job_status)
+            self.job_progress = QProgressBar()
+            self.job_progress.setRange(0, 100)
+            layout.addWidget(self.job_progress)
+            self.cancel_button = QPushButton(t(self.lang,"cancel_job"))
+            self.cancel_button.setEnabled(False)
+            self.cancel_button.clicked.connect(self.cancel_conversion)
+            layout.addWidget(self.cancel_button)
         layout.addWidget(label(t(self.lang,"hint"),"muted"))
         return page
 
@@ -332,6 +398,8 @@ class MediaFlow(QMainWindow):
         row.addWidget(label(t(self.lang,key)))
         combo=QComboBox()
         combo.addItems(values)
+        if self.stack.count() == 0:
+            self.controls[key] = combo
         combo.setMinimumWidth(180)
         row.addWidget(combo)
         layout.addLayout(row)
@@ -373,6 +441,8 @@ class MediaFlow(QMainWindow):
                 view.addItem(f"{p.name}    ·    {p.suffix.upper().lstrip('.')}    ·    {size}")
                 view.item(view.count()-1).setToolTip(str(p))
             count.setText(f"{t(self.lang,'count')}: {len(self.paths)}")
+        if self.go_buttons:
+            self.go_buttons[0].setEnabled(bool(self.paths) and not (self.worker and self.worker.isRunning()))
 
     def remove_selected(self, view: QListWidget) -> None:
         indexes={i.row() for i in view.selectedIndexes()}
@@ -390,6 +460,9 @@ class MediaFlow(QMainWindow):
             target.setText(t(self.lang,"destination") + ": " + folder)
 
     def set_language(self, code: str) -> None:
+        if self.worker and self.worker.isRunning():
+            QMessageBox.information(self, "MediaFlow", t(self.lang, "running_job"))
+            return
         if code==self.lang:
             return
         self.lang=code
@@ -398,6 +471,69 @@ class MediaFlow(QMainWindow):
         self.file_views=[]
         self.build()
         self.navigate(saved)
+
+    def start_conversion(self) -> None:
+        if self.worker and self.worker.isRunning():
+            return
+        if not self.paths:
+            return
+        try:
+            find_binary("ffmpeg")
+            find_binary("ffprobe")
+        except ConversionError as exc:
+            QMessageBox.warning(self, "MediaFlow", t(self.lang, "missing_ffmpeg") + "\n" + str(exc))
+            return
+        selected = self.controls
+        jobs = [Job(p, Path(self.output_dir),
+                    selected["format"].currentText().lower(),
+                    selected["codec"].currentText(),
+                    selected["quality"].currentText()) for p in self.paths]
+        self.worker = ConversionThread(jobs, self)
+        self.worker.started_file.connect(self.on_started_file)
+        self.worker.progressed.connect(self.on_progressed)
+        self.worker.completed_file.connect(self.on_completed_file)
+        self.worker.failed_file.connect(self.on_failed_file)
+        self.worker.completed_batch.connect(self.on_completed_batch)
+        self.worker.finished.connect(self.worker.deleteLater)
+        self.go_buttons[0].setEnabled(False)
+        self.cancel_button.setEnabled(True)
+        self.job_progress.setValue(0)
+        self.worker.start()
+
+    def on_started_file(self, index, name):
+        self.job_status.setText(f"{t(self.lang, 'working_job')} {index+1}/{len(self.worker.jobs)}: {name}")
+
+    def on_progressed(self, index, percent):
+        total = len(self.worker.jobs)
+        self.job_progress.setValue(round(100 * (index + percent / 100) / total))
+
+    def on_completed_file(self, path):
+        self.statusBar().showMessage(path, 12000)
+
+    def on_failed_file(self, error):
+        self.statusBar().showMessage(error, 15000)
+
+    def on_completed_batch(self, success, errors, cancelled):
+        self.go_buttons[0].setEnabled(bool(self.paths))
+        self.cancel_button.setEnabled(False)
+        state = "cancelled_job" if cancelled else "done_job"
+        self.job_status.setText(f"{t(self.lang, state)}: {success} | {t(self.lang, 'errors_job')}: {errors}")
+        if not cancelled and not errors:
+            self.job_progress.setValue(100)
+        if errors:
+            QMessageBox.warning(self, "MediaFlow", self.job_status.text())
+
+    def cancel_conversion(self):
+        if self.worker and self.worker.isRunning():
+            self.worker.cancel()
+            self.cancel_button.setEnabled(False)
+
+    def closeEvent(self, event):
+        if self.worker and self.worker.isRunning():
+            QMessageBox.information(self, "MediaFlow", t(self.lang, "running_job"))
+            event.ignore()
+        else:
+            event.accept()
 
     def show_settings(self) -> None:
         dlg=QDialog(self)
