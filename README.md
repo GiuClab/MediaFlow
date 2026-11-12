@@ -2,11 +2,11 @@
 
 Desktop media converter and planned compressor/editor by GiuClab, styled after [VisiLens](https://github.com/GiuClab/VisiLens).
 
-**Development snapshot v0.2.0:** local FFmpeg conversion is implemented in source. Compression and editing are not functional yet. No installer or release has been published.
+**Development snapshot v0.2.1:** local FFmpeg conversion is implemented in source. Compression and editing are not functional yet. No installer or release has been published.
 
 ## Windows portable test build
 
-Open [GitHub Actions — Windows portable preview](https://github.com/GiuClab/MediaFlow/actions/workflows/portable.yml), select a successful run, and download the artifact named **MediaFlow-v0.2.0-Windows-x64-portable-TEST** at the bottom of the run page (GitHub sign-in may be required). The artifact ZIP contains another ZIP with the MediaFlow folder; extract both, then run `MediaFlow.exe`. Do not run the executable from inside the archive.
+Open [GitHub Actions — Windows portable preview](https://github.com/GiuClab/MediaFlow/actions/workflows/portable.yml), select a successful run, and download the artifact named **MediaFlow-v0.2.1-Windows-x64-portable-TEST** at the bottom of the run page (GitHub sign-in may be required). The artifact ZIP contains another ZIP with the MediaFlow folder; extract both, then run `MediaFlow.exe`. Do not run the executable from inside the archive.
 
 The preview contains FFmpeg and ffprobe. This is a development artifact, not an official release; it is retained for 14 days. If a run fails, it has no working download and its logs should be checked. See bundled FFmpeg license notices.
 
@@ -24,6 +24,7 @@ The preview contains FFmpeg and ffprobe. This is a development artifact, not an 
 ## Converter
 - Batch video/audio conversion to MP4, MKV, MOV, WebM, MP3, FLAC or WAV.
 - Automatic codec, H.264, HEVC, AV1 or VP9 where compatible; quality presets.
+- Encoding speed: Fast (default), Balanced or Smaller file. Fast generally finishes sooner but may increase output size; AV1 and VP9 can still be slow on CPUs.
 - Conversion in a Qt worker thread, status/progress display and cancellation.
 - Never overwrite the input or an existing output; temporary files are cleaned up after errors or cancellation.
 - No uploads; all media processing is local.
