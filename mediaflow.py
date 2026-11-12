@@ -495,6 +495,7 @@ class MediaFlow(QMainWindow):
         self.worker.failed_file.connect(self.on_failed_file)
         self.worker.completed_batch.connect(self.on_completed_batch)
         self.worker.finished.connect(self.worker.deleteLater)
+        self.worker.finished.connect(self.clear_worker_reference)
         self.go_buttons[0].setEnabled(False)
         self.cancel_button.setEnabled(True)
         self.job_progress.setValue(0)
@@ -522,6 +523,9 @@ class MediaFlow(QMainWindow):
             self.job_progress.setValue(100)
         if errors:
             QMessageBox.warning(self, "MediaFlow", self.job_status.text())
+
+    def clear_worker_reference(self):
+        self.worker = None
 
     def cancel_conversion(self):
         if self.worker and self.worker.isRunning():
