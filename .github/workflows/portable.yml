@@ -1,0 +1,83 @@
+name: Windows portable preview
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "mediaflow.py"
+      - "converter.py"
+      - "requirements.txt"
+      - "tests/**"
+      - ".github/workflows/portable.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  portable:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+      - name: Install Python dependencies
+        run: python -m pip install -r requirements.txt pytest pyinstaller
+      - name: Validate source and tests
+        run: |
+          python -m compileall -q mediaflow.py converter.py tests
+          python -m pytest -q
+      - name: Package Windows desktop app
+        run: python -m PyInstaller --noconfirm --clean --windowed --onedir --name MediaFlow mediaflow.py
+      - name: Include FFmpeg and license material
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $url = 'https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip'
+          Invoke-WebRequest -Uri $url -OutFile ffmpeg-release-essentials.zip
+          Expand-Archive -Path ffmpeg-release-essentials.zip -DestinationPath ffmpeg-extracted
+          $ffmpeg = Get-ChildItem ffmpeg-extracted -Filter ffmpeg.exe -Recurse | Select-Object -First 1
+          $ffprobe = Get-ChildItem ffmpeg-extracted -Filter ffprobe.exe -Recurse | Select-Object -First 1
+          if (-not $ffmpeg -or -not $ffprobe) { throw 'FFmpeg tools not found in upstream archive' }
+          New-Item -ItemType Directory -Force dist/MediaFlow/ffmpeg | Out-Null
+          Copy-Item $ffmpeg.FullName dist/MediaFlow/ffmpeg/ffmpeg.exe
+          Copy-Item $ffprobe.FullName dist/MediaFlow/ffmpeg/ffprobe.exe
+          $license = Get-ChildItem ffmpeg-extracted -Recurse -File |
+            Where-Object { $_.Name -match '^LICENSE(\.txt)?$|^COPYING(\.GPLv3)?$' } |
+            Select-Object -First 1
+          if ($license) { Copy-Item $license.FullName dist/MediaFlow/ffmpeg/UPSTREAM-LICENSE.txt }
+          Copy-Item README.md dist/MediaFlow/README.md
+          @'
+          MediaFlow Portable - development test build
+          Run MediaFlow.exe. Python and FFmpeg are included, no installation needed.
+          Windows 10/11 x64. No installer; extract ZIP before starting.
+          Compression and editing are NOT implemented.
+          
+          Bundled FFmpeg executables come from https://www.gyan.dev/ffmpeg/builds/
+          Upstream builds are licensed under GPLv3. Source and build information:
+          https://www.gyan.dev/ffmpeg/builds/
+          https://github.com/FFmpeg/FFmpeg
+          See ffmpeg/UPSTREAM-LICENSE.txt when included.
+          This is a test artifact, not an official release.
+          '@ | Set-Content dist/MediaFlow/PORTABLE-README.txt -Encoding utf8
+          & dist/MediaFlow/ffmpeg/ffprobe.exe -version | Select-Object -First 1
+      - name: Verify portable EXE starts without a Python installation
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $app = (Resolve-Path dist/MediaFlow/MediaFlow.exe).Path
+          $process = Start-Process -FilePath $app -PassThru -WorkingDirectory (Split-Path $app)
+          Start-Sleep -Seconds 5
+          $process.Refresh()
+          if ($process.HasExited) { throw "Portable app exited unexpectedly: $($process.ExitCode)" }
+          Stop-Process -Id $process.Id -Force
+      - name: Create portable ZIP
+        shell: pwsh
+        run: Compress-Archive -Path dist/MediaFlow -DestinationPath MediaFlow-v0.2.0-Windows-x64-portable-TEST.zip
+      - uses: actions/upload-artifact@v6
+        with:
+          name: MediaFlow-v0.2.0-Windows-x64-portable-TEST
+          path: MediaFlow-v0.2.0-Windows-x64-portable-TEST.zip
+          if-no-files-found: error
+          retention-days: 14
