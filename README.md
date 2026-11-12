@@ -4,6 +4,12 @@ Desktop media converter and planned compressor/editor by GiuClab, styled after [
 
 **Development snapshot v0.2.0:** local FFmpeg conversion is implemented in source. Compression and editing are not functional yet. No installer or release has been published.
 
+## Windows portable test build
+
+Open [GitHub Actions — Windows portable preview](https://github.com/GiuClab/MediaFlow/actions/workflows/portable.yml), select a successful run, and download the artifact named **MediaFlow-v0.2.0-Windows-x64-portable-TEST** at the bottom of the run page (GitHub sign-in may be required). The artifact ZIP contains another ZIP with the MediaFlow folder; extract both, then run `MediaFlow.exe`. Do not run the executable from inside the archive.
+
+The preview contains FFmpeg and ffprobe. This is a development artifact, not an official release; it is retained for 14 days. If a run fails, it has no working download and its logs should be checked. See bundled FFmpeg license notices.
+
 ## Requirements
 - Windows 10/11, Python 3.10+, PySide6
 - FFmpeg and ffprobe installed separately, both accessible on PATH (or next to the script).
