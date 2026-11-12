@@ -17,7 +17,7 @@ from PySide6.QtWidgets import (
     QStackedWidget, QVBoxLayout, QWidget, QProgressBar,
 )
 
-APP_VERSION = "0.2.0"
+APP_VERSION = "0.2.1"
 EXTENSIONS = {".mp4", ".mkv", ".mov", ".avi", ".webm", ".m4v", ".wmv",
               ".mp3", ".wav", ".flac", ".aac", ".ogg", ".m4a", ".wma"}
 LANGS = {"en": "English", "it": "Italiano", "de": "Deutsch", "fr": "Français"}
@@ -120,6 +120,15 @@ EXTRA = {
 "de": ("Konvertierung abbrechen", "Bereit", "Konvertierung", "Abgeschlossen", "Abgebrochen", "Fehler", "Konvertierung läuft. Vor dem Schließen abbrechen.", "FFmpeg und ffprobe installieren und bin zum PATH hinzufügen."),
 "fr": ("Annuler la conversion", "Prêt", "Conversion", "Terminé", "Annulé", "Erreurs", "Conversion en cours. Annulez avant de fermer.", "Installez FFmpeg et ffprobe et ajoutez bin au PATH."),
 }
+SPEED_TEXT = {
+    "en": {"speed": "Encoding speed", "speed_hint": "Fast is the recommended setting. Faster encoding may produce larger files."},
+    "it": {"speed": "Velocità di codifica", "speed_hint": "Consigliata: Fast. Una conversione più rapida può produrre file più grandi."},
+    "de": {"speed": "Kodierungsgeschwindigkeit", "speed_hint": "Empfohlen: Fast. Schnellere Kodierung kann größere Dateien erzeugen."},
+    "fr": {"speed": "Vitesse d'encodage", "speed_hint": "Recommandé : Fast. Un encodage plus rapide peut produire des fichiers plus volumineux."},
+}
+for code, phrases in SPEED_TEXT.items():
+    TEXT[code].update(phrases)
+
 EXTRA_KEYS = ("cancel_job", "ready_job", "working_job", "done_job", "cancelled_job", "errors_job", "running_job", "missing_ffmpeg")
 for code, phrases in EXTRA.items():
     TEXT[code].update(dict(zip(EXTRA_KEYS, phrases)))
@@ -348,6 +357,8 @@ class MediaFlow(QMainWindow):
             self.make_combo(sl,"format",["MP4", "MKV", "MOV", "WebM", "MP3", "FLAC", "WAV"])
             self.make_combo(sl,"codec",["Auto", "H.264", "H.265 / HEVC", "AV1", "VP9"])
             self.make_combo(sl,"quality",["High", "Balanced", "Small file"])
+            self.make_combo(sl,"speed",["Fast", "Balanced", "Smaller file"])
+            sl.addWidget(label(t(self.lang,"speed_hint"),"muted"))
         elif index == 1:
             self.make_combo(sl,"preset",["Best quality", "Balanced", "Smallest file"])
             self.make_combo(sl,"resolution",["Original", "1080p", "720p", "480p"])
@@ -487,7 +498,8 @@ class MediaFlow(QMainWindow):
         jobs = [Job(p, Path(self.output_dir),
                     selected["format"].currentText().lower(),
                     selected["codec"].currentText(),
-                    selected["quality"].currentText()) for p in self.paths]
+                    selected["quality"].currentText(),
+                    selected["speed"].currentText()) for p in self.paths]
         self.worker = ConversionThread(jobs, self)
         self.worker.started_file.connect(self.on_started_file)
         self.worker.progressed.connect(self.on_progressed)
