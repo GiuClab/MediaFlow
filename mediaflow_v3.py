@@ -517,6 +517,11 @@ class MediaFlow(QMainWindow):
         main_lay.setSpacing(10)
 
         toolbar = QHBoxLayout()
+        add = QPushButton("+ " + tr(self.lang, "add"))
+        add.setObjectName("primary")
+        add.clicked.connect(self.add_dialog)
+        toolbar.addWidget(add)
+        toolbar.addStretch()
         self.tabs = []
         for idx, key in enumerate(("queue", "finished")):
             btn = QPushButton(tr(self.lang, key))
@@ -528,10 +533,6 @@ class MediaFlow(QMainWindow):
         self.fast.setChecked(self.settings.value("fast", True, type=bool))
         self.fast.toggled.connect(lambda val: self.settings.setValue("fast", val))
         toolbar.addWidget(self.fast)
-        add = QPushButton("+ " + tr(self.lang, "add"))
-        add.setObjectName("primary")
-        add.clicked.connect(self.add_dialog)
-        toolbar.addWidget(add)
         main_lay.addLayout(toolbar)
 
         scroll = QScrollArea()
@@ -571,9 +572,11 @@ class MediaFlow(QMainWindow):
         foot.addLayout(outrow)
         self.total_progress = QProgressBar()
         self.total_progress.setValue(0)
+        self.total_progress.setVisible(False)
         foot.addWidget(self.total_progress)
         self.cancel_button = QPushButton(tr(self.lang, "cancel"))
         self.cancel_button.setEnabled(False)
+        self.cancel_button.setVisible(False)
         self.cancel_button.clicked.connect(self.cancel_conversion)
         foot.addWidget(self.cancel_button)
         main_lay.addWidget(footer)
@@ -726,6 +729,8 @@ class MediaFlow(QMainWindow):
         self.worker.finished.connect(self.on_thread_finished)
         self.all_button.setEnabled(False)
         self.cancel_button.setEnabled(True)
+        self.cancel_button.setVisible(True)
+        self.total_progress.setVisible(True)
         self.total_progress.setValue(0)
         for item in selection:
             item.status = tr(self.lang, "ready")
@@ -766,10 +771,12 @@ class MediaFlow(QMainWindow):
 
     def on_batch_done(self, was_cancelled):
         self.cancel_button.setEnabled(False)
+        self.cancel_button.setVisible(False)
         self.all_button.setEnabled(bool([i for i in self.items if not i.output_path]))
         if not was_cancelled and all(i.output_path for i in self._worker_source):
             self.total_progress.setValue(100)
         self.statusBar().showMessage(tr(self.lang, "completed"), 7000)
+        self.total_progress.setVisible(False)
 
     def on_thread_finished(self):
         self.worker = None
