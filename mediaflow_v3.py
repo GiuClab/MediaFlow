@@ -22,7 +22,7 @@ from PySide6.QtWidgets import (
 
 from converter import Job, convert, find_binary, ConversionCancelled, ConversionError
 
-VERSION = "0.3.0"
+VERSION = "0.3.1"
 FORMATS_VIDEO = ("MP4", "MKV", "MOV", "WebM")
 FORMATS_AUDIO = ("MP3", "FLAC", "WAV")
 INPUT_EXT = {
@@ -219,50 +219,84 @@ class Batch(QThread):
 
 
 class ProfileDialog(QDialog):
+    """Two-column profile selector; choices reflect implemented FFmpeg outputs."""
     def __init__(self, lang: str, current: MediaItem, parent=None):
         super().__init__(parent)
         self.lang = lang
         self.result_profile = None
         self.setWindowTitle(tr(lang, "presets"))
-        self.setMinimumSize(470, 450)
-        layout = QVBoxLayout(self)
-        tabs = QTabWidget()
-        self.tabs = tabs
-        self.options: dict[str, QListWidget] = {}
+        self.resize(720, 535)
+        self.setMinimumSize(560, 440)
+        root = QVBoxLayout(self)
+        title = QLabel(tr(lang, "presets"))
+        title.setObjectName("pageTitle")
+        root.addWidget(title)
+        self.tabs = QTabWidget()
+        root.addWidget(self.tabs, 1)
+        self.options = {}
+        self.option_labels = {}
         for key, formats in (("video_tab", FORMATS_VIDEO), ("audio_tab", FORMATS_AUDIO)):
-            view = QListWidget()
+            page = QWidget()
+            row = QHBoxLayout(page)
+            row.setContentsMargins(8, 12, 8, 12)
+            names = QListWidget()
+            names.setFixedWidth(160)
             for fmt in formats:
-                view.addItem(fmt + "    •    " + tr(lang, "same"))
-            view.itemDoubleClicked.connect(self.accept_selected)
-            tabs.addTab(view, tr(lang, key))
-            self.options[key] = view
+                names.addItem(fmt)
+            row.addWidget(names)
+            details = QVBoxLayout()
+            heading = QLabel(tr(lang, "same"))
+            heading.setObjectName("section")
+            details.addWidget(heading)
+            box = QListWidget()
+            box.addItem(tr(lang, "same") + "  ·  " + "Original resolution")
+            box.setCurrentRow(0)
+            box.itemDoubleClicked.connect(self.accept_selected)
+            details.addWidget(box, 1)
+            info = muted("The current converter preserves source dimensions. "
+                         "Additional resolution profiles will follow.")
+            info.setWordWrap(True)
+            details.addWidget(info)
+            row.addLayout(details, 1)
+            names.currentRowChanged.connect(
+                lambda _index, view=box: view.setCurrentRow(0))
+            self.tabs.addTab(page, tr(lang, key))
+            self.options[key] = names
+            self.option_labels[key] = box
         device = QWidget()
-        device_lay = QVBoxLayout(device)
+        dl = QVBoxLayout(device)
         note = muted(tr(lang, "devicehint"))
         note.setWordWrap(True)
-        device_lay.addWidget(note)
-        device_lay.addStretch()
-        tabs.addTab(device, tr(lang, "device_tab"))
-        layout.addWidget(tabs)
+        dl.addWidget(note)
+        dl.addStretch()
+        self.tabs.addTab(device, tr(lang, "device_tab"))
+        controls = QHBoxLayout()
+        codec_col = QVBoxLayout()
+        codec_col.addWidget(muted("Codec"))
         self.codec = QComboBox()
         self.codec.addItems(["Auto", "H.264", "H.265 / HEVC", "AV1", "VP9"])
+        codec_col.addWidget(self.codec)
+        controls.addLayout(codec_col, 1)
+        quality_col = QVBoxLayout()
+        quality_col.addWidget(muted(tr(lang, "quality")))
         self.quality = QComboBox()
         self.quality.addItems(["High", "Balanced", "Small file"])
-        layout.addWidget(muted("Codec"))
-        layout.addWidget(self.codec)
-        layout.addWidget(muted(tr(lang, "quality")))
-        layout.addWidget(self.quality)
+        quality_col.addWidget(self.quality)
+        controls.addLayout(quality_col, 1)
+        root.addLayout(controls)
         self.codec.setCurrentText(current.codec)
         self.quality.setCurrentText(current.quality)
-        video_idx = FORMATS_VIDEO.index(current.output_format) if current.output_format in FORMATS_VIDEO else 0
-        audio_idx = FORMATS_AUDIO.index(current.output_format) if current.output_format in FORMATS_AUDIO else 0
-        tabs.setCurrentIndex(0 if current.output_format in FORMATS_VIDEO else 1)
-        self.options["video_tab"].setCurrentRow(video_idx)
-        self.options["audio_tab"].setCurrentRow(audio_idx)
+        self.tabs.setCurrentIndex(0 if current.output_format in FORMATS_VIDEO else 1)
+        for key, formats in (("video_tab", FORMATS_VIDEO), ("audio_tab", FORMATS_AUDIO)):
+            self.options[key].setCurrentRow(
+                formats.index(current.output_format) if current.output_format in formats else 0)
+        bottom = QHBoxLayout()
+        bottom.addStretch()
         self.action = QPushButton(tr(lang, "choose"))
         self.action.setObjectName("primary")
         self.action.clicked.connect(self.accept_selected)
-        layout.addWidget(self.action)
+        bottom.addWidget(self.action)
+        root.addLayout(bottom)
 
     def accept_selected(self, _=None):
         tab = self.tabs.currentIndex()
@@ -280,69 +314,82 @@ class ProfileDialog(QDialog):
 
 
 class FileCard(QFrame):
+    """Compact input-to-output media row with a real per-item action."""
     def __init__(self, item: MediaItem, lang: str, choose, remove, convert_one):
         super().__init__()
         self.item = item
         self.setObjectName("fileCard")
-        self.setMinimumWidth(690)
+        self.setMinimumWidth(660)
         outer = QVBoxLayout(self)
-        outer.setContentsMargins(14, 12, 14, 12)
-        outer.setSpacing(8)
-        line = QHBoxLayout()
+        outer.setContentsMargins(14, 13, 14, 12)
+        outer.setSpacing(7)
+
+        main = QHBoxLayout()
+        main.setSpacing(12)
         thumb = QFrame()
         thumb.setObjectName("thumb")
-        thumb.setFixedSize(108, 82)
-        tv = QVBoxLayout(thumb)
-        icon = QLabel("▶")
-        icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        icon.setStyleSheet("color:#385AD0;font-size:26px;border:none")
-        tv.addWidget(icon)
-        line.addWidget(thumb)
+        thumb.setFixedSize(128, 94)
+        thumb_layout = QVBoxLayout(thumb)
+        symbol = QLabel("▶")
+        symbol.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        symbol.setStyleSheet("color:#385AD0; font-size:27px; border:none;")
+        thumb_layout.addWidget(symbol)
+        main.addWidget(thumb)
+
         original = QVBoxLayout()
+        original.setSpacing(7)
         name = QLabel(item.path.name)
         name.setObjectName("filename")
         name.setToolTip(str(item.path))
+        name.setWordWrap(False)
         original.addWidget(name)
         try:
-            size = f"{item.path.stat().st_size/(1024*1024):.1f} MB"
+            size = f"{item.path.stat().st_size/(1024*1024):.2f} MB"
         except OSError:
             size = "—"
         original.addWidget(muted(f"{item.path.suffix.upper().lstrip('.')}  ·  {size}"))
-        original.addWidget(muted(tr(lang, "source")))
-        line.addLayout(original, 2)
-        arrow = QLabel("→")
+        original.addStretch()
+        main.addLayout(original, 3)
+
+        arrow = QLabel("⇄")
         arrow.setStyleSheet("color:#385AD0;font-size:21px;")
-        line.addWidget(arrow)
-        out = QVBoxLayout()
-        profile = QPushButton()
-        profile.setObjectName("profile")
-        profile.clicked.connect(lambda: choose(item))
-        out.addWidget(profile)
-        self.profile = profile
-        out.addWidget(muted(tr(lang, "target")))
+        main.addWidget(arrow)
+
+        target = QVBoxLayout()
+        target.setSpacing(8)
+        self.profile = QPushButton()
+        self.profile.setToolTip(tr(lang, "presets"))
+        self.profile.clicked.connect(lambda: choose(item))
+        target.addWidget(self.profile)
         self.state = muted(tr(lang, "ready"))
-        out.addWidget(self.state)
-        line.addLayout(out, 2)
+        target.addWidget(self.state)
+        target.addStretch()
+        main.addLayout(target, 3)
+
+        buttons = QVBoxLayout()
+        buttons.setSpacing(6)
         self.convert_button = QPushButton(tr(lang, "one"))
         self.convert_button.setObjectName("primary")
         self.convert_button.clicked.connect(lambda: convert_one(item))
-        line.addWidget(self.convert_button)
+        buttons.addWidget(self.convert_button)
         self.remove_button = QPushButton("×")
         self.remove_button.setToolTip(tr(lang, "removed"))
         self.remove_button.clicked.connect(lambda: remove(item))
-        line.addWidget(self.remove_button)
-        outer.addLayout(line)
+        buttons.addWidget(self.remove_button)
+        buttons.addStretch()
+        main.addLayout(buttons)
+        outer.addLayout(main)
+
         self.progress = QProgressBar()
         self.progress.setRange(0, 100)
         self.progress.setValue(0)
+        self.progress.setTextVisible(True)
         outer.addWidget(self.progress)
         self.refresh()
 
     def refresh(self):
-        self.profile.setText(f"{self.item.output_format}  ·  {self.item.codec}  ⚙")
-        if self.item.status:
-            self.state.setText(self.item.status)
-
+        self.profile.setText(f"{self.item.output_format}   •   {self.item.codec}   ⚙")
+        self.state.setText(self.item.status or "Ready")
 
 class DropArea(QFrame):
     files_added = Signal(list)
@@ -526,7 +573,7 @@ class MediaFlow(QMainWindow):
             self.statusBar().showMessage(tr(self.lang, "delayed"), 9000)
         else:
             self.drop_area.show()
-            self.all_button.setEnabled(bool(self.items) and not self.is_busy())
+            self.all_button.setEnabled(bool([i for i in self.items if not i.output_path]) and not self.is_busy())
         self.render_cards()
 
     def select_tab(self, idx):
@@ -575,7 +622,7 @@ class MediaFlow(QMainWindow):
             card = FileCard(item, self.lang, self.choose_profile, self.remove_item, self.convert_one)
             self.cards_layout.addWidget(card)
             self.cards[str(item.path)] = card
-        self.all_button.setEnabled(bool(self.items) and self.nav_index < 2 and not self.is_busy())
+        self.all_button.setEnabled(bool([i for i in self.items if not i.output_path]) and self.nav_index < 2 and not self.is_busy())
 
     def remove_item(self, item):
         if self.is_busy():
@@ -668,8 +715,8 @@ class MediaFlow(QMainWindow):
 
     def on_batch_done(self, was_cancelled):
         self.cancel_button.setEnabled(False)
-        self.all_button.setEnabled(bool(self.items))
-        if not was_cancelled:
+        self.all_button.setEnabled(bool([i for i in self.items if not i.output_path]))
+        if not was_cancelled and all(i.output_path for i in self._worker_source):
             self.total_progress.setValue(100)
         self.statusBar().showMessage(tr(self.lang, "completed"), 7000)
 
