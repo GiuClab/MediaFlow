@@ -17,6 +17,6 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt pytest
       - name: Compile Python modules
-        run: python -m compileall -q mediaflow.py mediaflow_v3.py converter.py tests
+        run: python -m compileall -q mediaflow.py mediaflow_v3.py media_probe.py converter.py tests
       - name: Run tests
         run: python -m pytest -q
