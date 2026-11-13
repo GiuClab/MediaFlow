@@ -31,6 +31,9 @@ def test_asf_import_in_small_window(tmp_path):
         window.select_tab(0)
         assert len(window.cards) == 1
     finally:
+        for worker in list(window.preview_workers):
+            worker.wait(30000)
+        app.processEvents()
         window.close()
 
 
