@@ -2,13 +2,26 @@
 
 Desktop media converter and planned compressor/editor by GiuClab, styled after [VisiLens](https://github.com/GiuClab/VisiLens).
 
-**Development snapshot v0.2.2:** local FFmpeg conversion is implemented in source. Compression and editing are not functional yet. No installer or release has been published.
+**Development snapshot v0.3.0:** local FFmpeg conversion is implemented in source. Compression and editing are not functional yet. No installer or release has been published.
 
 ## Windows portable test build
 
-Open [GitHub Actions — Windows portable preview](https://github.com/GiuClab/MediaFlow/actions/workflows/portable.yml), select a successful run, and download the artifact named **MediaFlow-v0.2.2-Windows-x64-portable-TEST** at the bottom of the run page (GitHub sign-in may be required). The artifact ZIP contains another ZIP with the MediaFlow folder; extract both, then run `MediaFlow.exe`. Do not run the executable from inside the archive.
+Open [GitHub Actions — Windows portable preview](https://github.com/GiuClab/MediaFlow/actions/workflows/portable.yml), select a successful run, and download the artifact named **MediaFlow-v0.3.0-Windows-x64-portable-TEST** at the bottom of the run page (GitHub sign-in may be required). The artifact ZIP contains another ZIP with the MediaFlow folder; extract both, then run `MediaFlow.exe`. Do not run the executable from inside the archive.
 
 The preview contains FFmpeg and ffprobe. This is a development artifact, not an official release; it is retained for 14 days. If a run fails, it has no working download and its logs should be checked. See bundled FFmpeg license notices.
+
+## MediaFlow v0.3.0 interface preview
+
+The main window has been redesigned with an original GiuClab interpretation of a modern multimedia conversion workflow:
+
+- Left sidebar: Video converter, Audio converter, Compressor and Editor (last two are placeholders).
+- File cards displaying input name, type and size alongside selected output profile.
+- Per-file Convert and Convert all actions, progress bars, Finished tab and output-folder selection.
+- Output-profile dialog with Video, Audio and Device sections. The device section is informational and **not implemented**.
+- Four languages (English, Italian, German, French) and GiuClab's light theme.
+- A fast-encoding toggle controlling the existing FFmpeg encoding speed presets.
+
+**Known limitations:** The preview uses a video placeholder instead of a decoded thumbnail; detailed duration/resolution, audio-track selectors, device-specific presets, hardware acceleration and sophisticated profile editing are not implemented. Conversion is performed with the existing FFmpeg engine. This user interface is not a copy of Wondershare artwork or software.
 
 ## Requirements
 - Windows 10/11, Python 3.10+, PySide6
