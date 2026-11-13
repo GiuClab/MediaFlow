@@ -7,6 +7,7 @@ on:
     paths:
       - "mediaflow.py"
       - "mediaflow_v3.py"
+      - "media_probe.py"
       - "converter.py"
       - "requirements.txt"
       - "tests/**"
@@ -27,7 +28,7 @@ jobs:
         run: python -m pip install -r requirements.txt pytest pyinstaller
       - name: Validate source and tests
         run: |
-          python -m compileall -q mediaflow.py mediaflow_v3.py converter.py tests
+          python -m compileall -q mediaflow.py mediaflow_v3.py media_probe.py converter.py tests
           python -m pytest -q
       - name: Package Windows desktop app
         run: python -m PyInstaller --noconfirm --clean --windowed --onedir --name MediaFlow mediaflow.py
@@ -75,10 +76,10 @@ jobs:
           Stop-Process -Id $process.Id -Force
       - name: Create portable ZIP
         shell: pwsh
-        run: Compress-Archive -Path dist/MediaFlow -DestinationPath MediaFlow-v0.3.0-Windows-x64-portable-TEST.zip
+        run: Compress-Archive -Path dist/MediaFlow -DestinationPath MediaFlow-v0.3.1-Windows-x64-portable-TEST.zip
       - uses: actions/upload-artifact@v6
         with:
-          name: MediaFlow-v0.3.0-Windows-x64-portable-TEST
-          path: MediaFlow-v0.3.0-Windows-x64-portable-TEST.zip
+          name: MediaFlow-v0.3.1-Windows-x64-portable-TEST
+          path: MediaFlow-v0.3.1-Windows-x64-portable-TEST.zip
           if-no-files-found: error
           retention-days: 14
