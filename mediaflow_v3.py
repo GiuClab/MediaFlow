@@ -12,7 +12,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from PySide6.QtCore import Qt, QSettings, QThread, Signal
-from PySide6.QtGui import QAction, QDesktopServices
+from PySide6.QtGui import QAction, QDesktopServices, QPixmap
+from media_probe import probe_preview
 from PySide6.QtWidgets import (
     QApplication, QCheckBox, QComboBox, QDialog, QFileDialog, QFrame,
     QHBoxLayout, QLabel, QLineEdit, QListWidget, QListWidgetItem, QMainWindow,
@@ -181,6 +182,8 @@ class MediaItem:
     quality: str = "High"
     status: str = ""
     output_path: str = ""
+    details: str = ""
+    thumbnail: bytes = b""
 
 
 class Batch(QThread):
@@ -216,6 +219,18 @@ class Batch(QThread):
 
     def cancel(self):
         self.cancel_event.set()
+
+
+class PreviewWorker(QThread):
+    preview_ready = Signal(str, str, bytes)
+
+    def __init__(self, path: Path, parent=None):
+        super().__init__(parent)
+        self.path = path
+
+    def run(self):
+        details, thumb = probe_preview(self.path)
+        self.preview_ready.emit(str(self.path), details, thumb)
 
 
 class ProfileDialog(QDialog):
@@ -334,6 +349,12 @@ class FileCard(QFrame):
         symbol.setAlignment(Qt.AlignmentFlag.AlignCenter)
         symbol.setStyleSheet("color:#385AD0; font-size:27px; border:none;")
         thumb_layout.addWidget(symbol)
+        self.thumb_icon = symbol
+        if item.thumbnail:
+            pixmap = QPixmap()
+            if pixmap.loadFromData(item.thumbnail):
+                symbol.setPixmap(pixmap.scaled(120, 86, Qt.AspectRatioMode.KeepAspectRatio,
+                                               Qt.TransformationMode.SmoothTransformation))
         main.addWidget(thumb)
 
         original = QVBoxLayout()
@@ -348,6 +369,8 @@ class FileCard(QFrame):
         except OSError:
             size = "—"
         original.addWidget(muted(f"{item.path.suffix.upper().lstrip('.')}  ·  {size}"))
+        self.details_label = muted(item.details)
+        original.addWidget(self.details_label)
         original.addStretch()
         main.addLayout(original, 3)
 
@@ -435,6 +458,7 @@ class MediaFlow(QMainWindow):
         self.worker: Batch | None = None
         self._worker_items: list[MediaItem] = []
         self._worker_source: list[MediaItem] = []
+        self.preview_workers: list[PreviewWorker] = []
         self.setWindowTitle(f"MediaFlow v{VERSION} — © 2026 GiuClab")
         self.resize(1240, 810)
         self.setMinimumSize(790, 540)
@@ -605,7 +629,34 @@ class MediaFlow(QMainWindow):
         self.paths = [item.path for item in self.items]
         self.select_tab(0)
         if added:
+            for item in self.items[-added:]:
+                worker = PreviewWorker(item.path, self)
+                worker.preview_ready.connect(self.on_preview_ready)
+                worker.finished.connect(worker.deleteLater)
+                worker.finished.connect(lambda w=worker: self.finish_preview_worker(w))
+                self.preview_workers.append(worker)
+                worker.start()
             self.statusBar().showMessage(f"{added} file(s)", 5000)
+
+    def on_preview_ready(self, filename, details, thumbnail):
+        item = next((it for it in self.items if str(it.path) == filename), None)
+        if item is None:
+            return
+        item.details = details
+        item.thumbnail = thumbnail
+        card = self.cards.get(filename)
+        if card:
+            card.details_label.setText(details)
+            if thumbnail:
+                pixmap = QPixmap()
+                if pixmap.loadFromData(thumbnail):
+                    card.thumb_icon.setPixmap(
+                        pixmap.scaled(120, 86, Qt.AspectRatioMode.KeepAspectRatio,
+                                      Qt.TransformationMode.SmoothTransformation))
+
+    def finish_preview_worker(self, worker):
+        if worker in self.preview_workers:
+            self.preview_workers.remove(worker)
 
     def render_cards(self):
         while self.cards_layout.count():
@@ -767,6 +818,10 @@ class MediaFlow(QMainWindow):
             + "Made with ❤️ by GiuClab")
 
     def closeEvent(self, event):
+        if self.preview_workers:
+            QMessageBox.information(self, "MediaFlow", "Media analysis is in progress.")
+            event.ignore()
+            return
         if self.is_busy():
             QMessageBox.information(self, "MediaFlow", tr(self.lang, "running"))
             event.ignore()
